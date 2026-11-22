@@ -103,19 +103,19 @@
     box-shadow: 0 6px 24px rgba(0,0,0,.15);
     user-select: none;
   }
-  #mapImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
-  #mapBox.ready #mapImg { display: block; }
-  #mapBox.noimg #mapImg { display: none !important; }
+  #mapImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  #mapBox.noimg #mapImg { display: none; }
   /* fallback grid if the image file is missing */
-  #mapBox.ready.noimg {
+  #mapBox.noimg {
     background:
       linear-gradient(#cbd5e1 1px, transparent 1px) 0 0 / 10% 10%,
       linear-gradient(90deg, #cbd5e1 1px, transparent 1px) 0 0 / 10% 10%,
       #f8fafc;
   }
   #mapMsg {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    text-align: center; padding: 1.5rem; color: #475569; font-size: 1.05rem;
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+    text-align: center; padding: .7rem 1rem;
+    background: rgba(15,23,42,.75); color: #fff; font-size: 1rem;
   }
   #mapBox.ready #mapMsg { display: none; }
 
@@ -179,7 +179,7 @@
 
   <!-- map -->
   <div id="mapBox">
-    <img id="mapImg" alt="Map" src="map/m_0.avif">
+    <img id="mapImg" alt="" src="map/m_0.avif">
     <div id="mapMsg">Tap anywhere on the page to share your location</div>
   </div>
 
@@ -194,8 +194,11 @@
 // Your Stripe Payment Link (create one at dashboard.stripe.com → Payment Links)
 const STRIPE_LINK = "https://donate.stripe.com/REPLACE_WITH_YOUR_LINK";
 
-// Map image (square) and the area it covers
-const MAP_IMAGE = "map/m_0.avif";
+// Map images (square)
+const MAP_START  = "map/m_0.avif";        // shown when the page loads
+const MAP_SYDNEY = "map/Sydney_AU.avif";  // replaces it when the user is inside square_sy_au
+
+// square_sy_au : the 60 km × 60 km area covered by Sydney_AU.avif
 // Top-left corner: 33°38'23.5"S 150°40'52.8"E
 const TOP_LEFT = {
   lat: -(33 + 38 / 60 + 23.5 / 3600),   // -33.639861
@@ -344,8 +347,14 @@ paintInitials();
 const mapBox = document.getElementById("mapBox");
 const mapImg = document.getElementById("mapImg");
 const mapMsg = document.getElementById("mapMsg");
-mapImg.src = MAP_IMAGE;
+function setMap(src) {
+  if (mapImg.getAttribute("src") === src) return;
+  mapBox.classList.remove("noimg");
+  mapImg.src = src;
+}
 mapImg.addEventListener("error", () => mapBox.classList.add("noimg"));
+mapImg.addEventListener("load",  () => mapBox.classList.remove("noimg"));
+setMap(MAP_START);
 
 // GPS → km from the top-left corner → % position on the square map
 function toMap(lat, lon) {
@@ -361,6 +370,7 @@ function onPosition(lat, lon) {
   if (!p.inside) {
     user.pos = null;
     mapBox.classList.remove("ready");
+    setMap(MAP_START);                     // keep / go back to m_0.avif
     mapMsg.textContent = "You are out of range";
     drawDot();
     if (!warnedOut) { warnedOut = true; alert("you are out of range"); }
@@ -368,6 +378,7 @@ function onPosition(lat, lon) {
   }
   user.pos = { x: p.x, y: p.y };
   mapBox.classList.add("ready");
+  setMap(MAP_SYDNEY);                      // replace m_0.avif with Sydney_AU.avif
   drawDot();
   if (!user.initials) {
     alert("Choose your initials (top bar) to appear on the map");
