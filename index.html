@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sydney Map</title>
+<style>
+  /* ================= SETTINGS YOU MAY CHANGE ================= */
+  :root {
+    --nav-bg: #0f172a;
+    --nav2-bg: #1e293b;
+    --nav-fg: #e2e8f0;
+    --accent: #38bdf8;
+    --ctrl: 52px;            /* size of heart / phone / initials buttons */
+  }
+  /* =========================================================== */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f1f5f9;
+    color: #0f172a;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---------- NAV 1 : round flags ---------- */
+  .nav1 {
+    display: flex; justify-content: center; align-items: center;
+    padding: .6rem 1rem;
+    background: var(--nav-bg);
+  }
+  .flags { display: flex; gap: .7rem; list-style: none; flex-wrap: wrap; justify-content: center; }
+  .flag-btn {
+    width: 38px; height: 38px; border-radius: 50%; overflow: hidden;
+    border: 2px solid rgba(255,255,255,.35); padding: 0; cursor: pointer;
+    background: none; display: block;
+    transition: transform .15s, border-color .15s, box-shadow .15s;
+  }
+  .flag-btn svg { width: 100%; height: 100%; display: block; }
+  .flag-btn:hover { transform: scale(1.12); border-color: #fff; }
+  .flag-btn.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,.45); }
+
+  /* ---------- NAV 2 : heart / phone / initials ---------- */
+  .nav2 {
+    display: flex; justify-content: center; align-items: center; gap: 1rem;
+    padding: .6rem 1rem;
+    background: var(--nav2-bg);
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  }
+  .ctrl {
+    width: var(--ctrl); height: var(--ctrl);
+    border-radius: 14px; border: none; cursor: pointer;
+    background: rgba(255,255,255,.08);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .12s, background .15s;
+    color: #fff;
+  }
+  .ctrl:hover  { background: rgba(255,255,255,.16); }
+  .ctrl:active { transform: scale(.92); }
+  .ctrl svg { width: 82%; height: 82%; display: block; }
+  #heart path { transition: fill .25s; }
+  #phoneBtn { font-size: 30px; line-height: 1; }
+  #phoneBtn.set { box-shadow: inset 0 0 0 2px #22c55e; }
+  #initialsBtn { font-weight: 800; font-size: 20px; letter-spacing: 1px; }
+  #initialsBtn.set { box-shadow: inset 0 0 0 2px #22c55e; }
+
+  /* ---------- main ---------- */
+  main { max-width: 640px; margin: 1.25rem auto 3rem; padding: 0 1rem; }
+
+  /* 26 × 26 initials picker */
+  #picker {
+    display: none;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.15);
+    margin-bottom: 1rem; overflow: hidden;
+  }
+  #picker.open { display: block; }
+  .picker-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: .55rem .8rem; background: #0f172a; color: #fff; font-weight: 600;
+  }
+  .picker-head button {
+    background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; line-height: 1;
+  }
+  .grid-wrap { max-height: 320px; overflow: auto; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(26, 34px);
+    gap: 2px; padding: 6px; width: max-content;
+  }
+  .grid button {
+    width: 34px; height: 28px; border: 1px solid #cbd5e1; border-radius: 5px;
+    background: #f8fafc; font-size: 12px; font-weight: 700; cursor: pointer; color: #0f172a;
+  }
+  .grid button:hover    { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .grid button.selected { background: #0f172a; color: #fff; border-color: #0f172a; }
+
+  /* map */
+  #mapBox {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    border-radius: 12px; overflow: hidden;
+    background: #e2e8f0;
+    box-shadow: 0 6px 24px rgba(0,0,0,.15);
+    user-select: none;
+  }
+  #mapImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  #mapBox.ready #mapImg { display: block; }
+  #mapBox.noimg #mapImg { display: none !important; }
+  /* fallback grid if the image file is missing */
+  #mapBox.ready.noimg {
+    background:
+      linear-gradient(#cbd5e1 1px, transparent 1px) 0 0 / 10% 10%,
+      linear-gradient(90deg, #cbd5e1 1px, transparent 1px) 0 0 / 10% 10%,
+      #f8fafc;
+  }
+  #mapMsg {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 1.5rem; color: #475569; font-size: 1.05rem;
+  }
+  #mapBox.ready #mapMsg { display: none; }
+
+  /* user dot */
+  .dot {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 15px; letter-spacing: .5px;
+    border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.35);
+    cursor: pointer; z-index: 2;
+    text-shadow: 0 1px 2px rgba(0,0,0,.35);
+  }
+  .dot .tip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #0f172a; color: #fff; padding: .35rem .6rem; border-radius: 6px;
+    font-size: 13px; font-weight: 600; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity .15s;
+    text-shadow: none;
+  }
+  .dot .tip a { color: #7dd3fc; text-decoration: none; }
+  .dot:hover .tip, .dot.show .tip { opacity: 1; pointer-events: auto; }
+
+  /* donate */
+  .donate { text-align: center; margin-top: 1.5rem; }
+  .donate a {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: #635bff; color: #fff; text-decoration: none;
+    padding: .85rem 1.6rem; border-radius: 10px; font-weight: 700; font-size: 1.05rem;
+    box-shadow: 0 4px 14px rgba(99,91,255,.4);
+    transition: transform .12s, background .15s;
+  }
+  .donate a:hover { background: #544bf0; transform: translateY(-1px); }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV 1 : flags only ============ -->
+<nav class="nav1">
+  <ul class="flags" id="flags"></ul>
+</nav>
+
+<!-- ============ NAV 2 : heart / phone / initials ============ -->
+<nav class="nav2">
+  <button class="ctrl" id="heart" aria-label="Gender and age">
+    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+  </button>
+  <button class="ctrl" id="phoneBtn" aria-label="Mobile phone">📱</button>
+  <button class="ctrl" id="initialsBtn" aria-label="Your initials">AB</button>
+</nav>
+
+<main>
+  <!-- 26 × 26 initials picker (opens above the map) -->
+  <div id="picker">
+    <div class="picker-head">
+      <span>Choose your initials</span>
+      <button id="pickerClose" aria-label="Close">×</button>
+    </div>
+    <div class="grid-wrap"><div class="grid" id="grid"></div></div>
+  </div>
+
+  <!-- map -->
+  <div id="mapBox">
+    <img id="mapImg" alt="Map" src="map/m_0.avif">
+    <div id="mapMsg">Tap anywhere on the page to share your location</div>
+  </div>
+
+  <!-- Stripe donation -->
+  <div class="donate">
+    <a id="donateLink" href="#" target="_blank" rel="noopener">♥ Donate with Stripe</a>
+  </div>
+</main>
+
+<script>
+/* ======================= SETTINGS ======================= */
+// Your Stripe Payment Link (create one at dashboard.stripe.com → Payment Links)
+const STRIPE_LINK = "https://donate.stripe.com/REPLACE_WITH_YOUR_LINK";
+
+// Map image (square) and the area it covers
+const MAP_IMAGE = "map/m_0.avif";
+// Top-left corner: 33°38'23.5"S 150°40'52.8"E
+const TOP_LEFT = {
+  lat: -(33 + 38 / 60 + 23.5 / 3600),   // -33.639861
+  lon:   150 + 40 / 60 + 52.8 / 3600    // 150.681333
+};
+const AREA_KM = 60;                     // 60 km × 60 km square
+
+// Heart states: colour + message (starts at index 0 = light red)
+const HEART_STATES = [
+  { color: "#ff8a8a", text: "I am a female between 18 and 35" }, // light red
+  { color: "#b00020", text: "I am a female above 35" },          // dark red
+  { color: "#8ecbff", text: "I am a man between 18 and 35" },    // light blue
+  { color: "#0b3d91", text: "I am a man above 35" }              // dark blue
+];
+/* ======================================================== */
+
+document.getElementById("donateLink").href = STRIPE_LINK;
+
+/* ---------- saved user data (kept in this browser) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const user = {
+  heart:    store.get("heart", 0),
+  phone:    store.get("phone", ""),
+  initials: store.get("initials", ""),
+  pos: null            // {x, y} in percent of the map
+};
+
+/* =================== NAV 1 : FLAGS =================== */
+function star(cx, cy, R, r, n) {
+  const pts = [];
+  for (let i = 0; i < n * 2; i++) {
+    const rad = i % 2 === 0 ? R : r;
+    const a = -Math.PI / 2 + (i * Math.PI) / n;
+    pts.push((cx + rad * Math.cos(a)).toFixed(1) + "," + (cy + rad * Math.sin(a)).toFixed(1));
+  }
+  return `<polygon points="${pts.join(" ")}" fill="#fff"/>`;
+}
+function unionJack(id, x = 0, y = 0, size = 512) {
+  return `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 50 50">
+    <defs><clipPath id="${id}-t"><path d="M25,25 h25 v25 z v25 h-25 z h-25 v-25 z v-25 h25 z"/></clipPath></defs>
+    <rect width="50" height="50" fill="#012169"/>
+    <path d="M0,0 L50,50 M50,0 L0,50" stroke="#fff" stroke-width="10"/>
+    <path d="M0,0 L50,50 M50,0 L0,50" stroke="#C8102E" stroke-width="6.5" clip-path="url(#${id}-t)"/>
+    <path d="M25,0 v50 M0,25 h50" stroke="#fff" stroke-width="16"/>
+    <path d="M25,0 v50 M0,25 h50" stroke="#C8102E" stroke-width="10"/>
+  </svg>`;
+}
+const FLAGS = {
+  au: id => `<rect width="512" height="512" fill="#012169"/>${unionJack(id, 0, 0, 256)}
+    ${star(128, 384, 72, 32, 7)}${star(384, 92, 30, 13, 7)}${star(300, 240, 30, 13, 7)}
+    ${star(458, 205, 30, 13, 7)}${star(418, 300, 16, 7, 5)}${star(384, 420, 34, 15, 7)}`,
+  fr: () => `<rect width="171" height="512" fill="#0055A4"/><rect x="171" width="170" height="512" fill="#fff"/><rect x="341" width="171" height="512" fill="#EF4135"/>`,
+  de: () => `<rect width="512" height="171" fill="#000"/><rect y="171" width="512" height="170" fill="#DD0000"/><rect y="341" width="512" height="171" fill="#FFCE00"/>`,
+  es: () => `<rect width="512" height="512" fill="#AA151B"/><rect y="128" width="512" height="256" fill="#F1BF00"/>`,
+  gb: id => unionJack(id),
+  us: () => {
+    const h = 512 / 13, cw = 256, ch = h * 7, dx = cw / 12, dy = ch / 10;
+    let s = `<rect width="512" height="512" fill="#fff"/>`;
+    for (let i = 0; i < 13; i += 2) s += `<rect y="${(i * h).toFixed(2)}" width="512" height="${h.toFixed(2)}" fill="#B22234"/>`;
+    s += `<rect width="${cw}" height="${ch.toFixed(2)}" fill="#3C3B6E"/>`;
+    for (let row = 0; row < 9; row++) {
+      const n = row % 2 === 0 ? 6 : 5;
+      for (let k = 0; k < n; k++) s += star(row % 2 === 0 ? dx * (1 + 2 * k) : dx * (2 + 2 * k), dy * (row + 1), 9, 3.6, 5);
+    }
+    return s;
+  }
+};
+const flagList = document.getElementById("flags");
+["au", "fr", "de", "es", "gb", "us"].forEach((code, i) => {
+  const li = document.createElement("li");
+  li.innerHTML = `<button class="flag-btn" data-code="${code}" aria-label="${code}">
+    <svg viewBox="0 0 512 512" aria-hidden="true">${FLAGS[code]("f" + i)}</svg></button>`;
+  flagList.appendChild(li);
+});
+flagList.addEventListener("click", e => {
+  const b = e.target.closest(".flag-btn");
+  if (!b) return;
+  document.querySelectorAll(".flag-btn").forEach(x => x.classList.toggle("active", x === b));
+});
+document.querySelector('.flag-btn[data-code="au"]').classList.add("active");
+
+/* =================== NAV 2 : HEART =================== */
+const heartPath = document.querySelector("#heart path");
+function paintHeart() {
+  heartPath.setAttribute("fill", HEART_STATES[user.heart].color);
+}
+document.getElementById("heart").addEventListener("click", () => {
+  user.heart = (user.heart + 1) % HEART_STATES.length;
+  store.set("heart", user.heart);
+  paintHeart();
+  drawDot();
+  setTimeout(() => alert(HEART_STATES[user.heart].text), 30); // let the colour change show first
+});
+paintHeart();
+
+/* =================== NAV 2 : PHONE =================== */
+const phoneBtn = document.getElementById("phoneBtn");
+function paintPhone() { phoneBtn.classList.toggle("set", !!user.phone); }
+phoneBtn.addEventListener("click", () => {
+  const v = prompt("Enter your mobile phone number:", user.phone);
+  if (v === null) return;
+  const clean = v.replace(/[^\d+ ]/g, "").trim();
+  if (clean && clean.replace(/\D/g, "").length < 8) { alert("Please enter a valid mobile number"); return; }
+  user.phone = clean;
+  store.set("phone", user.phone);
+  paintPhone();
+  drawDot();
+});
+paintPhone();
+
+/* =================== NAV 2 : INITIALS (26 × 26) =================== */
+const initialsBtn = document.getElementById("initialsBtn");
+const picker = document.getElementById("picker");
+const grid = document.getElementById("grid");
+const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+for (const a of ABC) for (const b of ABC) {
+  const btn = document.createElement("button");
+  btn.textContent = a + b;
+  grid.appendChild(btn);
+}
+function paintInitials() {
+  initialsBtn.textContent = user.initials || "AB";
+  initialsBtn.classList.toggle("set", !!user.initials);
+  grid.querySelectorAll("button").forEach(b => b.classList.toggle("selected", b.textContent === user.initials));
+}
+initialsBtn.addEventListener("click", () => {
+  picker.classList.toggle("open");
+  if (picker.classList.contains("open")) picker.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+document.getElementById("pickerClose").addEventListener("click", () => picker.classList.remove("open"));
+grid.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  user.initials = b.textContent;
+  store.set("initials", user.initials);
+  paintInitials();
+  picker.classList.remove("open");
+  drawDot();
+});
+paintInitials();
+
+/* =================== MAP + GPS =================== */
+const mapBox = document.getElementById("mapBox");
+const mapImg = document.getElementById("mapImg");
+const mapMsg = document.getElementById("mapMsg");
+mapImg.src = MAP_IMAGE;
+mapImg.addEventListener("error", () => mapBox.classList.add("noimg"));
+
+// GPS → km from the top-left corner → % position on the square map
+function toMap(lat, lon) {
+  const xKm = (lon - TOP_LEFT.lon) * 111.320 * Math.cos(lat * Math.PI / 180);
+  const yKm = (TOP_LEFT.lat - lat) * 110.574;
+  return { xKm, yKm, inside: xKm >= 0 && xKm <= AREA_KM && yKm >= 0 && yKm <= AREA_KM,
+           x: xKm / AREA_KM * 100, y: yKm / AREA_KM * 100 };
+}
+
+let warnedOut = false;
+function onPosition(lat, lon) {
+  const p = toMap(lat, lon);
+  if (!p.inside) {
+    user.pos = null;
+    mapBox.classList.remove("ready");
+    mapMsg.textContent = "You are out of range";
+    drawDot();
+    if (!warnedOut) { warnedOut = true; alert("you are out of range"); }
+    return;
+  }
+  user.pos = { x: p.x, y: p.y };
+  mapBox.classList.add("ready");
+  drawDot();
+  if (!user.initials) {
+    alert("Choose your initials (top bar) to appear on the map");
+  }
+}
+
+// draw the user's circle: heart colour + initials; phone on hover / tap
+let dot = null;
+function drawDot() {
+  if (!user.pos || !user.initials) { if (dot) dot.remove(); dot = null; return; }
+  if (!dot) {
+    dot = document.createElement("div");
+    dot.className = "dot";
+    dot.addEventListener("click", e => { e.stopPropagation(); dot.classList.toggle("show"); });
+    mapBox.appendChild(dot);
+  }
+  dot.style.left = user.pos.x + "%";
+  dot.style.top  = user.pos.y + "%";
+  dot.style.background = HEART_STATES[user.heart].color;
+  const tel = user.phone
+    ? `📱 <a href="tel:${user.phone.replace(/\s/g, "")}">${user.phone}</a>`
+    : "📱 no phone entered";
+  dot.innerHTML = `${user.initials}<span class="tip">${tel}</span>`;
+}
+
+// ask for GPS permission on the first tap / click on the page
+let gpsAsked = false;
+function askGPS() {
+  if (gpsAsked) return;
+  gpsAsked = true;
+
+  // testing helper: index.html?lat=-33.8688&lon=151.2093
+  const q = new URLSearchParams(location.search);
+  if (q.has("lat") && q.has("lon")) { onPosition(+q.get("lat"), +q.get("lon")); return; }
+
+  if (!("geolocation" in navigator)) { alert("Location is not supported on this device"); return; }
+  mapMsg.textContent = "Finding your location…";
+  navigator.geolocation.watchPosition(
+    pos => onPosition(pos.coords.latitude, pos.coords.longitude),
+    err => {
+      gpsAsked = false;
+      mapMsg.textContent = "Location permission is needed — tap to try again";
+      if (err.code === 1) alert("Please allow location access to see yourself on the map");
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+  );
+}
+document.addEventListener("click", askGPS, { capture: true });
+document.addEventListener("touchend", askGPS, { capture: true, passive: true });
+</script>
+</body>
+</html>
